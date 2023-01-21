@@ -203,6 +203,14 @@ TagDetector::~TagDetector() {
   }
 }
 
+geometry_msgs::Point cvPointToGeometryPoint(const cv::Point2d &pt) {
+  geometry_msgs::Point p;
+  p.x = pt.x;
+  p.y = pt.y;
+  p.z = 0;
+  return p;
+}
+
 AprilTagDetectionArray TagDetector::detectTags (
     const cv_bridge::CvImagePtr& image,
     const sensor_msgs::CameraInfoConstPtr& camera_info) {
@@ -332,7 +340,8 @@ AprilTagDetectionArray TagDetector::detectTags (
     std::vector<cv::Point3d > standaloneTagObjectPoints;
     std::vector<cv::Point2d > standaloneTagImagePoints;
     addObjectPoints(tag_size/2, cv::Matx44d::eye(), standaloneTagObjectPoints);
-    addImagePoints(detection, standaloneTagImagePoints);
+    addImagePoints(detection, standaloneTagImagePoints); // CCW from bottom left (-1,-1) (-1,1) (1,1) (1,-1)
+    // so minimum should be first, maximum should be last. hopefully this is a valid assumption
     Eigen::Isometry3d transform = getRelativeTransform(standaloneTagObjectPoints,
                                                      standaloneTagImagePoints,
                                                      fx, fy, cx, cy);
@@ -344,6 +353,13 @@ AprilTagDetectionArray TagDetector::detectTags (
     tag_detection.pose = tag_pose;
     tag_detection.id.push_back(detection->id);
     tag_detection.size.push_back(tag_size);
+    // tag_detection.corners = map cvPointToGeometryPoint standaloneTagImagePoints
+    if (standaloneTagImagePoints.size() != 4) {
+      ROS_WARN_STREAM("[apriltag_ros] there are not four corners?!?!?");
+    }
+    for (int i = 0; i < 4; i++) {
+      tag_detection.corners[i] = cvPointToGeometryPoint(standaloneTagImagePoints[i]);
+    }
     tag_detection_array.detections.push_back(tag_detection);
     detection_names.push_back(standaloneDescription->frame_name());
   }
